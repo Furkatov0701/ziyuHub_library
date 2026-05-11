@@ -1,26 +1,40 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 
 export default function Kitoblar() {
     const [books, setBooks] = useState([]);
-    const [filteredBooks, setFilteredBooks] = useState([]);
     const [searchTerm, setSearchTerm] = useState("");
-    const [categoryFilter, setCategoryFilter] = useState("all");
     const [statusFilter, setStatusFilter] = useState("all");
     const [sortBy, setSortBy] = useState("title");
     const [selectedBook, setSelectedBook] = useState(null);
 
+    // Kitoblarni yuklash
     useEffect(() => {
         fetch("https://kutubxona-uz-7l39.onrender.com/api/v1/book")
             .then(r => r.json())
             .then(r => {
+                console.log("API dan kelgan kitoblar:", r.data); // Debug uchun
                 setBooks(r.data || []);
-                setFilteredBooks(r.data || []);
             })
             .catch(err => console.error(err));
     }, []);
 
-    // Filtrlash
-    useEffect(() => {
+    // Holatni aniq tekshirish
+    const isAvailable = (book) => {
+        if (!book) return false;
+        
+        const status = (book.status || "").toString().toLowerCase().trim();
+        
+        // "Bo'sh" bo'lishi mumkin bo'lgan holatlar
+        return status === "bo'sh" || 
+               status === "available" || 
+               status === "free" || 
+               status === "" ||          // status bo'sh bo'lsa ham bo'sh deb hisoblaymiz
+               status === "null" ||
+               status === "undefined";
+    };
+
+    // Filtrlash va saralash
+    const filteredBooks = useMemo(() => {
         let result = [...books];
 
         // Qidiruv
@@ -32,104 +46,72 @@ export default function Kitoblar() {
             );
         }
 
-        // Kategoriya filtri (hozircha API da yo'q bo'lsa ham tayyor)
-        if (categoryFilter !== "all") {
-            result = result.filter(book => book.category?.toLowerCase() === categoryFilter);
-        }
-
         // Holat filtri
         if (statusFilter === "available") {
-            result = result.filter(book => 
-                book.status === "available" || book.status === "Bo'sh" || !book.status?.toLowerCase().includes("band")
-            );
+            result = result.filter(book => isAvailable(book));
         } else if (statusFilter === "borrowed") {
-            result = result.filter(book => book.status?.toLowerCase().includes("band"));
+            result = result.filter(book => !isAvailable(book));
         }
 
         // Saralash
-        if (sortBy === "title") result.sort((a, b) => a.title?.localeCompare(b.title));
-        if (sortBy === "author") result.sort((a, b) => a.author?.localeCompare(b.author));
-        if (sortBy === "newest") result.sort((a, b) => (b.id || 0) - (a.id || 0));
+        if (sortBy === "title") {
+            result.sort((a, b) => (a.title || "").localeCompare(b.title || ""));
+        } else if (sortBy === "author") {
+            result.sort((a, b) => (a.author || "").localeCompare(b.author || ""));
+        } else if (sortBy === "newest") {
+            result.sort((a, b) => (b.id || 0) - (a.id || 0));
+        }
 
-        setFilteredBooks(result);
-    }, [searchTerm, books, categoryFilter, statusFilter, sortBy]);
-
-    const isAvailable = (book) => 
-        book.status === "available" || book.status === "Bo'sh" || !book.status?.toLowerCase().includes("band");
+        return result;
+    }, [books, searchTerm, statusFilter, sortBy]);
 
     return (
         <div className="min-h-screen bg-[#F8F5F0]">
-            {/* Header */}
             <header className="bg-white border-b sticky top-0 z-50 shadow-sm">
-                <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4 flex justify-between items-center">
+                <div className="max-w-7xl mx-auto px-6 py-5 flex justify-between items-center">
                     <div className="flex items-center gap-3">
-                        <div className="text-3xl"></div>
                         <span className="text-2xl font-semibold text-gray-800">ZiyoHub</span>
                     </div>
-                    <div className="text-sm text-gray-600 font-medium hidden sm:block">
+                    <div className="text-sm text-gray-600">
                         {books.length} ta kitob
                     </div>
                 </div>
             </header>
 
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 pt-10 pb-20">
-                {/* Sarlavha */}
-                <div className="text-center mb-10">
-                    <h1 className="text-3xl sm:text-4xl md:text-5xl font-bold text-gray-900">
-                        Izlash kutubxonasiga xush kelibsiz
+            <div className="max-w-7xl mx-auto px-6 pt-10 pb-20">
+                <div className="text-center mb-12">
+                    <h1 className="text-4xl md:text-5xl font-bold text-gray-900">
+                        ZiyoHub kutubxonasiga xush kelibsiz
                     </h1>
+                    <p className="text-gray-600 mt-3 text-lg">
+                        Kerakli kitobni toping va mavjudligini aniqlang
+                    </p>
                 </div>
 
-                {/* Qidiruv + Kategoriya + Tugma */}
-                <div className="max-w-5xl mx-auto mb-12">
-                    <div className="flex flex-col lg:flex-row gap-4">
-                        {/* Qidiruv input */}
-                        <div className="flex relative">
-                            <input
-                                type="text"
-                                value={searchTerm}
-                                onChange={(e) => setSearchTerm(e.target.value)}
-                                placeholder="Kitob nomi yoki muallif kiriting..."
-                                className="w-full h-14 px-6 bg-white border border-gray-200 rounded-2xl text-lg focus:outline-none focus:border-amber-600"
-                            />
-                        </div>
+                {/* Filterlar */}
+                <div className="max-w-5xl mx-auto mb-12 flex flex-col lg:flex-row gap-4">
+                    <input
+                        type="text"
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        placeholder="Kitob nomi yoki muallif kiriting..."
+                        className="flex-1 h-14 px-6 bg-white border border-gray-200 rounded-3xl text-lg focus:outline-none focus:border-amber-600"
+                    />
 
-                                                {/* Izlash tugmasi */}
-                        <button 
-                            className="h-14 px-12 bg-amber-600 hover:bg-amber-700 text-white font-semibold rounded-2xl transition-all active:scale-95 whitespace-nowrap"
-                        >
-                            Izlash
-                        </button>
-
-                        {/* Kategoriya */}
-                        <select 
-                            value={categoryFilter}
-                            onChange={(e) => setCategoryFilter(e.target.value)}
-                            className="h-14 px-6 bg-white border border-gray-200 rounded-2xl focus:outline-none focus:border-amber-600 text-base"
-                        >
-                            <option value="all">Barcha kategoriyalar</option>
-                            <option value="roman">Roman</option>
-                            <option value="sheriyat">She'riyat</option>
-                            <option value="tarix">Tarix</option>
-                            <option value="diniy">Diniy</option>
-                            <option value="ilmiy">Ilmiy</option>
-                        </select>
-
-                        {/* Holat */}
-                        <select 
-                            value={statusFilter}
-                            onChange={(e) => setStatusFilter(e.target.value)}
-                            className="h-14 px-6 bg-white border border-gray-200 rounded-2xl focus:outline-none focus:border-amber-600"
-                        >
-                            <option value="all">Barchasi</option>
-                            <option value="available">Bo'sh</option>
-                            <option value="borrowed">Band</option>
-                        </select>
-
-                                        <div className="flex justify-end mb-8">
                     <select 
+                        value={statusFilter}
+                        onChange={(e) => setStatusFilter(e.target.value)}
+                        className="h-14 px-6 bg-white border border-gray-200 rounded-3xl focus:outline-none focus:border-amber-600"
+                    >
+                        <option value="all">Barchasi</option>
+                        <option value="available">Bo'sh</option>
+                        <option value="borrowed">Band</option>
+                    </select>
+
+                    <select 
+                        value={sortBy}
                         onChange={(e) => setSortBy(e.target.value)}
-                        className="border border-gray-300 rounded-xl px-5 h-14 bg-white"
+                        className="h-14 px-6 bg-white border border-gray-200 rounded-3xl focus:outline-none focus:border-amber-600"
                     >
                         <option value="title">Nomi bo‘yicha</option>
                         <option value="author">Muallif bo‘yicha</option>
@@ -137,34 +119,33 @@ export default function Kitoblar() {
                     </select>
                 </div>
 
-
-                    </div>
-                </div>
-
-                {/* Saralash */}
-
-
-                {/* Kitob Kartalari - Kattalashtirilgan */}
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-6 sm:gap-8">
+                {/* Kitoblar Grid */}
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-6">
                     {filteredBooks.map((book) => (
                         <div 
                             key={book.id} 
                             onClick={() => setSelectedBook(book)}
                             className="group bg-white rounded-3xl overflow-hidden shadow-sm hover:shadow-2xl transition-all duration-300 cursor-pointer"
                         >
-                            <div className="relative bg-[#F5F0E8] aspect-[8/10] flex justify-center items-center border-b overflow-hidden">
-                                <img 
-                                    src={book.image || "https://via.placeholder.com/300x420?text=Kitob"} 
-                                    alt={book.title}
-                                    className="h-[92%] object-contain shadow-md group-hover:scale-105 transition-transform duration-500"
-                                />
-                                <div className={`absolute top-4 right-4 px-3.5 py-1 rounded-full text-xs font-medium shadow-md ${isAvailable(book) ? 'bg-emerald-500 text-white' : 'bg-rose-500 text-white'}`}>
-                                    {isAvailable(book) ? "✓ Bo'sh" : "Band"}
+                            <div className="relative bg-[#F5F0E8] aspect-[3/4] flex items-center justify-center overflow-hidden">
+                                {book.image_url || book.image ? (
+                                    <img 
+                                        src={book.image_url || book.image} 
+                                        alt={book.title}
+                                        className="h-full w-full object-cover group-hover:scale-105 transition-transform duration-500"
+                                    />
+                                ) : (
+                                    <div className="text-7xl opacity-30"></div>
+                                )}
+
+                                <div className={`absolute top-4 right-4 px-4 py-1 rounded-full text-xs font-semibold shadow-md
+                                    ${isAvailable(book) ? 'bg-emerald-500 text-white' : 'bg-rose-500 text-white'}`}>
+                                    {isAvailable(book) ? "Bo'sh" : "Band"}
                                 </div>
                             </div>
 
                             <div className="p-5">
-                                <h3 className="font-semibold text-base leading-tight line-clamp-2 mb-2 text-gray-900">
+                                <h3 className="font-semibold text-[15.5px] leading-tight line-clamp-2 mb-2">
                                     {book.title}
                                 </h3>
                                 <p className="text-gray-600 text-sm line-clamp-1">
@@ -176,8 +157,8 @@ export default function Kitoblar() {
                 </div>
 
                 {filteredBooks.length === 0 && (
-                    <div className="text-center py-20 text-gray-500 text-xl">
-                        😔 Hech qanday kitob topilmadi
+                    <div className="text-center py-20">
+                        <p className="text-2xl text-gray-400">😔 Hech qanday kitob topilmadi</p>
                     </div>
                 )}
             </div>
@@ -185,24 +166,26 @@ export default function Kitoblar() {
             {/* Modal */}
             {selectedBook && (
                 <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-[100] p-4">
-                    <div className="bg-white rounded-3xl max-w-lg sm:max-w-2xl w-full max-h-[95vh] overflow-auto">
-                        <div className="p-6 sm:p-8">
+                    <div className="bg-white rounded-3xl max-w-2xl w-full max-h-[95vh] overflow-auto">
+                        <div className="p-8">
                             <button onClick={() => setSelectedBook(null)} className="float-right text-4xl text-gray-400 hover:text-gray-700">×</button>
                             
-                            <div className="flex flex-col sm:flex-row gap-8 mt-4">
+                            <div className="flex flex-col md:flex-row gap-8 mt-6">
                                 <img 
-                                    src={selectedBook.image || "https://via.placeholder.com/300x420?text=Kitob"} 
+                                    src={selectedBook.image_url || selectedBook.image || "https://via.placeholder.com/400x520?text=Kitob"} 
                                     alt={selectedBook.title}
-                                    className="w-full sm:w-72 rounded-2xl shadow-lg"
+                                    className="w-full md:w-80 rounded-2xl shadow-lg"
                                 />
                                 <div className="flex-1">
                                     <h2 className="text-3xl font-bold mb-3">{selectedBook.title}</h2>
                                     <p className="text-xl text-gray-600 mb-6">{selectedBook.author}</p>
-                                    <p><strong>Holati:</strong> 
-                                        <span className={isAvailable(selectedBook) ? "text-emerald-600" : "text-rose-600"}>
+                                    
+                                    <div className="mb-6">
+                                        <span className="font-medium">Holati: </span>
+                                        <span className={`font-semibold ${isAvailable(selectedBook) ? "text-emerald-600" : "text-rose-600"}`}>
                                             {isAvailable(selectedBook) ? " Bo'sh" : " Band"}
                                         </span>
-                                    </p>
+                                    </div>
                                 </div>
                             </div>
                         </div>
